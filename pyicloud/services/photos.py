@@ -1,5 +1,5 @@
 """Photo service."""
-
+import json
 import base64
 import json
 import logging
@@ -797,7 +797,7 @@ class PhotoAlbum(BasePhotoAlbum):
                     },
                 ],
             },
-            "resultsLimit": num_results,
+            "resultsLimit": self.page_size * 2,
             "desiredKeys": [
                 "resJPEGFullWidth",
                 "resJPEGFullHeight",
@@ -897,7 +897,7 @@ class PhotoAlbum(BasePhotoAlbum):
                 "position",
                 "isKeyAsset",
             ],
-            "zoneID": self.zone_id,
+            "zoneID": {"zoneName": "PrimarySync"},
         }
 
         if query_filter:
@@ -1067,19 +1067,18 @@ class PhotoAsset:
     def asset_date(self) -> datetime:
         """Gets the photo asset date."""
         try:
-            return datetime.fromtimestamp(
-                self._asset_record["fields"]["assetDate"]["value"] / 1000.0,
-                timezone.utc,
-            )
+            return datetime.utcfromtimestamp(
+                self._asset_record["fields"]["assetDate"]["value"] / 1000.0
+            ).replace(tzinfo=timezone.utc)
         except KeyError:
-            return datetime.fromtimestamp(0, timezone.utc)
+            return datetime.utcfromtimestamp(0).replace(tzinfo=timezone.utc)
 
     @property
     def added_date(self) -> datetime:
         """Gets the photo added date."""
-        return datetime.fromtimestamp(
-            self._asset_record["fields"]["addedDate"]["value"] / 1000.0, timezone.utc
-        )
+        return datetime.utcfromtimestamp(
+            self._asset_record["fields"]["addedDate"]["value"] / 1000.0
+        ).replace(tzinfo=timezone.utc)
 
     @property
     def dimensions(self):
@@ -1152,7 +1151,9 @@ class PhotoAsset:
         else:
             version["type"] = None
 
-        return version
+                    self._versions[key] = version
+
+        return self._versions
 
     def download(self, version="original", **kwargs) -> Optional[Response]:
         """Returns the photo file."""
@@ -1195,7 +1196,7 @@ class PhotoAsset:
         url = f"{endpoint}/records/modify?{params}"
 
         return self._service.session.post(
-            url, data=json_data, headers={"Content-type": "text/plain"}
+        url, data=json_data, headers={"Content-type": "text/plain"}
         )
 
     def delete(self) -> Response:
