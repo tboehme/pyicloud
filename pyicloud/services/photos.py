@@ -1163,6 +1163,41 @@ class PhotoAsset:
             self.versions[version]["url"], stream=True, **kwargs
         )
 
+    def add_to_album(self, album: PhotoAlbum):
+        """Moves photo to a new album"""
+        albumId = album.obj_type.split(":")[1]
+        recordName = f"{self._asset_record['recordName']}-IN-{albumId}"
+        json_data = (
+            '{"operations":[{'
+            '"operationType":"create",'
+            '"record":{'
+            '"recordName":"%s",'
+            '"recordType":"CPLContainerRelation",'
+            '"fields":{'
+            '"itemId":{"value":"%s"},'
+            '"containerId":{"value":"%s"}}}}],'
+            '"zoneID":{'
+            '"zoneName":"%s",'
+            '"ownerRecordName":"%s",'
+            '"zoneType":"%s"},'
+            '"atomic":true}'
+            % (
+                recordName,
+                self._asset_record["recordName"],
+                albumId,
+                self._asset_record["zoneID"]["zoneName"],
+                self._asset_record["zoneID"]["ownerRecordName"],
+                self._asset_record["zoneID"]["zoneType"],
+            )
+        )
+        endpoint = self._service.service_endpoint
+        params = urlencode(self._service.params)
+        url = f"{endpoint}/records/modify?{params}"
+
+        return self._service.session.post(
+            url, data=json_data, headers={"Content-type": "text/plain"}
+        )
+
     def delete(self) -> Response:
         """Deletes the photo."""
         data: dict[str, Any] = {
