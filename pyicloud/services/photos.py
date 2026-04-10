@@ -546,7 +546,10 @@ class PhotoLibrary(BasePhotoLibrary):
             _LOGGER.error("Failed to create album: %s", ex)
             raise PhotosServiceException("Failed to create album") from ex
 
-        return self._convert_record_to_album(records[0])
+        album = self._convert_record_to_album(records[0])
+        if album is not None:
+            self.albums.append(album)
+        return album
 
     def upload_file(self, path: str) -> Optional["PhotoAsset"]:
         """Upload a photo from path, returns a recordName"""
