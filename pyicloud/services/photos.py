@@ -494,37 +494,43 @@ class PhotoLibrary(BasePhotoLibrary):
         return albums
 
     def create_album(
-        self, name: str, album_type: AlbumTypeEnum = AlbumTypeEnum.ALBUM
+        self,
+        name: str,
+        album_type: AlbumTypeEnum = AlbumTypeEnum.ALBUM,
+        parent_folder: Optional["PhotoAlbum"] = None,
     ) -> Optional["PhotoAlbum"]:
         """Creates a new album, returns the request response."""
+        fields: dict[str, Any] = {
+            "albumNameEnc": {
+                "value": base64.b64encode(name.encode("utf-8")).decode(
+                    "utf-8"
+                ),
+            },
+            "albumType": {
+                "value": album_type.value,
+            },
+            "isDeleted": {
+                "value": 0,
+            },
+            "isExpunged": {
+                "value": 0,
+            },
+            "sortType": {
+                "value": 1,
+            },
+            "sortAscending": {
+                "value": 1,
+            },
+        }
+        if parent_folder is not None:
+            fields["parentId"] = {"value": parent_folder._record_id}
         data: dict[str, Any] = {
             "operations": [
                 {
                     "operationType": "create",
                     "record": {
                         "recordType": "CPLAlbum",
-                        "fields": {
-                            "albumNameEnc": {
-                                "value": base64.b64encode(name.encode("utf-8")).decode(
-                                    "utf-8"
-                                ),
-                            },
-                            "albumType": {
-                                "value": album_type.value,
-                            },
-                            "isDeleted": {
-                                "value": 0,
-                            },
-                            "isExpunged": {
-                                "value": 0,
-                            },
-                            "sortType": {
-                                "value": 1,
-                            },
-                            "sortAscending": {
-                                "value": 1,
-                            },
-                        },
+                        "fields": fields,
                     },
                 }
             ],
@@ -716,6 +722,12 @@ class PhotosService(BaseService):
     ) -> Optional["PhotoAlbum"]:
         """Creates a new album in the primary photo library."""
         return self._root_library.create_album(name, album_type)
+
+    def create_nested_album(
+        self, name: str, parent_folder: "PhotoAlbum"
+    ) -> Optional["PhotoAlbum"]:
+        """Creates an album nested inside parent_folder in the primary photo library."""
+        return self._root_library.create_nested_album(name, parent_folder)
 
 
 class BasePhotoAlbum(Iterable, ABC):
