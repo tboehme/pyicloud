@@ -160,6 +160,11 @@ class AlbumContainer(Iterable):
         self._albums[album.id] = album
         self._index: list[str] = list(self._albums.keys())
 
+    def remove(self, album_id: str) -> None:
+        """Removes an album from the container by its record ID."""
+        self._albums.pop(album_id, None)
+        self._index = list(self._albums.keys())
+
     def index(self, idx: int) -> "BasePhotoAlbum":
         """Returns the album at the given index."""
         if idx < 0 or idx >= len(self._index):
@@ -1072,6 +1077,7 @@ class PhotoAlbum(BasePhotoAlbum):
                 "Failed to delete photo from album", album=self
             ) from ex
 
+        self._library.albums.remove(self._record_id)
         return True
 
     def add_photo(self, photo: "PhotoAsset") -> bool:

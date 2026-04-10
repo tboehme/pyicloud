@@ -1912,6 +1912,14 @@ def test_create_album_success(mock_photos_service: MagicMock) -> None:
                 }
             )
         ),
+        # Mock response for fetching albums (called when appending to albums container)
+        MagicMock(
+            json=MagicMock(
+                return_value={
+                    "records": []
+                }
+            )
+        ),
     ]
     library = PhotoLibrary(
         service=mock_photos_service,
@@ -1948,11 +1956,13 @@ def test_create_album_success(mock_photos_service: MagicMock) -> None:
         "atomic": True,
     }
     # The albumType value may be an enum, so just check the call was made
-    assert mock_photos_service.session.post.call_count == 2
-    args, kwargs = mock_photos_service.session.post.call_args
-    assert "records/modify" in args[0]
+    # Now expecting 3 calls: indexing state + create album + fetch albums
+    assert mock_photos_service.session.post.call_count == 3
+    # Check the second call (index 1) which is the create album call
+    create_call_args, create_call_kwargs = mock_photos_service.session.post.call_args_list[1]
+    assert "records/modify" in create_call_args[0]
     assert (
-        kwargs["json"]["operations"][0]["record"]["fields"]["albumNameEnc"]["value"]
+        create_call_kwargs["json"]["operations"][0]["record"]["fields"]["albumNameEnc"]["value"]
         == expected_data["operations"][0]["record"]["fields"]["albumNameEnc"]["value"]
     )
 
@@ -2036,6 +2046,14 @@ def test_create_album_with_custom_album_type(mock_photos_service: MagicMock) -> 
                             },
                         }
                     ]
+                }
+            )
+        ),
+        # Mock response for fetching albums (called when appending to albums container)
+        MagicMock(
+            json=MagicMock(
+                return_value={
+                    "records": []
                 }
             )
         ),

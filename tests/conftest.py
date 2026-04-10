@@ -250,7 +250,7 @@ def mock_photo_library(mock_photos_service: MagicMock) -> BasePhotoLibrary:
             raise NotImplementedError()
 
         def _get_albums(self) -> AlbumContainer:
-            raise NotImplementedError()
+            return AlbumContainer()
 
     return MyPhotoLibrary(
         service=mock_photos_service,
