@@ -885,6 +885,7 @@ def test_photos_service_delegates_simple_calls() -> None:
     assert service.albums is sentinel
     assert service.private_client is service._private_client
     assert service.create_album("X") is root.create_album.return_value
+    root.create_album.assert_called_with("X", AlbumTypeEnum.ALBUM, None)
 
     root.sync_cursor.return_value = "cursor"
     assert service.sync_cursor() == "cursor"

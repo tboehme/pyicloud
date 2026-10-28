@@ -44,6 +44,7 @@ from pyicloud.services.photos import (
     ListTypeEnum,
     ObjectTypeEnum,
     PhotoAlbum,
+    PhotoAlbumFolder,
     PhotoAlbumRecordState,
     PhotoAsset,
     PhotoLibrary,
@@ -5111,6 +5112,111 @@ def test_create_album_success_typed_client() -> None:
     op = mock_client.modify.call_args.kwargs["operations"][0]
     assert op.operationType == "create"
     assert op.record.fields.get_value("position") > 0
+
+
+def test_create_album_in_parent_folder_typed_client() -> None:
+    """A parent folder is sent as the record's parentId, as iCloud.com does."""
+    mock_client = MagicMock()
+    mock_client.query.return_value = CKQueryResponse(
+        records=[
+            _ck_record(
+                "CheckIndexingState",
+                "indexing",
+                {"state": {"type": "STRING", "value": "FINISHED"}},
+            )
+        ],
+        syncToken="sync-token",
+    )
+    mock_client.modify.return_value = CKModifyResponse(
+        records=[
+            _ck_record(
+                "CPLAlbum",
+                "child123",
+                {
+                    "albumNameEnc": {
+                        "type": "STRING",
+                        "value": base64.b64encode(b"Child").decode("utf-8"),
+                    },
+                    "albumType": {
+                        "type": "INT64",
+                        "value": AlbumTypeEnum.FOLDER.value,
+                    },
+                    "parentId": {"type": "STRING", "value": "FOLDER-ID"},
+                    "isDeleted": {"type": "INT64", "value": 0},
+                },
+            )
+        ],
+        syncToken="sync-token",
+    )
+    service: PhotosService = cast(
+        PhotosService,
+        SimpleNamespace(
+            session=object(),
+            service_endpoint="https://example.com/endpoint",
+            params={"dsid": "12345"},
+        ),
+    )
+    library = PhotoLibrary(
+        service=service,
+        zone_id={"zoneName": "PrimarySync"},
+        client=mock_client,
+        upload_url="https://upload.example.com",
+    )
+    parent = cast(PhotoAlbumFolder, SimpleNamespace(id="FOLDER-ID"))
+
+    album = library.create_album("Child", AlbumTypeEnum.FOLDER, parent_folder=parent)
+
+    assert isinstance(album, PhotoAlbumFolder)
+    op = mock_client.modify.call_args.kwargs["operations"][0]
+    assert op.record.fields.get_value("parentId") == "FOLDER-ID"
+    assert op.record.fields.get_value("albumType") == AlbumTypeEnum.FOLDER.value
+
+
+def test_create_album_in_parent_folder_rest(mock_photos_service: MagicMock) -> None:
+    """The REST fallback sends the parent folder as parentId too."""
+    mock_photos_service.session.post.side_effect = [
+        MagicMock(
+            json=MagicMock(
+                return_value={
+                    "records": [{"fields": {"state": {"value": "FINISHED"}}}],
+                }
+            )
+        ),
+        MagicMock(
+            json=MagicMock(
+                return_value={
+                    "records": [
+                        {
+                            "recordName": "album789",
+                            "recordChangeTag": "tag789",
+                            "fields": {
+                                "albumNameEnc": {
+                                    "value": base64.b64encode(b"Inner").decode("utf-8")
+                                },
+                                "parentId": {"value": "FOLDER-ID"},
+                                "isDeleted": {"value": False},
+                            },
+                        }
+                    ]
+                }
+            )
+        ),
+    ]
+    library = PhotoLibrary(
+        service=mock_photos_service,
+        zone_id={"zoneName": "PrimarySync"},
+        upload_url="https://upload.example.com",
+    )
+    parent = cast(PhotoAlbumFolder, SimpleNamespace(id="FOLDER-ID"))
+
+    album = library.create_album("Inner", parent_folder=parent)
+
+    assert album is not None
+    assert album.id == "album789"
+    fields = mock_photos_service.session.post.call_args.kwargs["json"]["operations"][0][
+        "record"
+    ]["fields"]
+    assert fields["parentId"] == {"value": "FOLDER-ID"}
 
 
 def test_create_album_success_typed_client_populates_uncached_album_list(

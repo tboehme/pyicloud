@@ -784,14 +784,22 @@ class PhotoLibrary(BasePhotoLibrary):
         self,
         name: str,
         album_type: AlbumTypeEnum = AlbumTypeEnum.ALBUM,
+        parent_folder: PhotoAlbumFolder | None = None,
     ) -> PhotoAlbum | None:
-        """Create a new album in the library and return it."""
+        """Create a new album in the library and return it.
+
+        ``parent_folder`` places the new album or folder inside an existing
+        folder, as iCloud.com does, by setting the record's ``parentId``.
+        """
         encoded = base64.b64encode(name.encode("utf-8")).decode("utf-8")
         position = _new_album_position()
+        parent_id = parent_folder.id if parent_folder is not None else None
         client = self._client
         if client is not None and _can_use_typed_cloudkit(self.service.session):
-            return self._create_album_typed(client, encoded, album_type, position)
-        return self._create_album_rest(encoded, album_type, position)
+            return self._create_album_typed(
+                client, encoded, album_type, position, parent_id
+            )
+        return self._create_album_rest(encoded, album_type, position, parent_id)
 
     def _create_album_typed(
         self,
@@ -799,24 +807,28 @@ class PhotoLibrary(BasePhotoLibrary):
         encoded: str,
         album_type: AlbumTypeEnum,
         position: int,
+        parent_id: str | None = None,
     ) -> PhotoAlbum | None:
+        fields: dict[str, Any] = {
+            "albumNameEnc": {
+                "type": "ENCRYPTED_BYTES",
+                "value": encoded,
+            },
+            "albumType": {"type": "INT64", "value": int(album_type.value)},
+            "isDeleted": {"type": "INT64", "value": 0},
+            "isExpunged": {"type": "INT64", "value": 0},
+            "position": {"type": "INT64", "value": position},
+            "sortType": {"type": "INT64", "value": 1},
+            "sortAscending": {"type": "INT64", "value": 1},
+        }
+        if parent_id is not None:
+            fields["parentId"] = {"type": "STRING", "value": parent_id}
         op = CKModifyOperation(
             operationType="create",
             record=CKWriteRecord(
                 recordName=os.urandom(16).hex().upper(),
                 recordType="CPLAlbum",
-                fields={
-                    "albumNameEnc": {
-                        "type": "ENCRYPTED_BYTES",
-                        "value": encoded,
-                    },
-                    "albumType": {"type": "INT64", "value": int(album_type.value)},
-                    "isDeleted": {"type": "INT64", "value": 0},
-                    "isExpunged": {"type": "INT64", "value": 0},
-                    "position": {"type": "INT64", "value": position},
-                    "sortType": {"type": "INT64", "value": 1},
-                    "sortAscending": {"type": "INT64", "value": 1},
-                },
+                fields=fields,
             ),
         )
         resp = client.modify(
@@ -837,10 +849,22 @@ class PhotoLibrary(BasePhotoLibrary):
         encoded: str,
         album_type: AlbumTypeEnum,
         position: int,
+        parent_id: str | None = None,
     ) -> PhotoAlbum | None:
         endpoint = self.service.service_endpoint
         params = urlencode(self.service.params)
         url = f"{endpoint}/records/modify?{params}"
+        fields: dict[str, Any] = {
+            "albumNameEnc": {"value": encoded},
+            "albumType": {"value": album_type.value},
+            "isDeleted": {"value": 0},
+            "isExpunged": {"value": 0},
+            "position": {"value": position},
+            "sortType": {"value": 1},
+            "sortAscending": {"value": 1},
+        }
+        if parent_id is not None:
+            fields["parentId"] = {"value": parent_id}
         response = self.service.session.post(
             url,
             json={
@@ -849,15 +873,7 @@ class PhotoLibrary(BasePhotoLibrary):
                         "operationType": "create",
                         "record": {
                             "recordType": "CPLAlbum",
-                            "fields": {
-                                "albumNameEnc": {"value": encoded},
-                                "albumType": {"value": album_type.value},
-                                "isDeleted": {"value": 0},
-                                "isExpunged": {"value": 0},
-                                "position": {"value": position},
-                                "sortType": {"value": 1},
-                                "sortAscending": {"value": 1},
-                            },
+                            "fields": fields,
                         },
                     }
                 ],
@@ -2483,9 +2499,13 @@ class PhotosService(BaseService):
         self,
         name: str,
         album_type: AlbumTypeEnum = AlbumTypeEnum.ALBUM,
+        parent_folder: PhotoAlbumFolder | None = None,
     ) -> PhotoAlbum | None:
-        """Create a new album in the root library and return it."""
-        return self._root_library.create_album(name, album_type)
+        """Create a new album in the root library and return it.
+
+        ``parent_folder`` places it inside an existing folder.
+        """
+        return self._root_library.create_album(name, album_type, parent_folder)
 
     def upload(
         self,
